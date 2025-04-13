@@ -415,51 +415,48 @@ class BaseModel(MetaModel, nn.Module):
     @ staticmethod
     def run_train(model):
         """Accept the instance object(model) here, and then run the train loop."""
-        if model.engine_cfg['with_cluster']:
-            model.msg_mgr.log_info("Running cluster...")
-            model.eval()
-            BaseModel.run_cluster(model)
-            model.train()
-            model.msg_mgr.reset_time()
-
-        for inputs in model.train_loader:
-            ipts = model.inputs_pretreament(inputs)
-            with autocast(enabled=model.engine_cfg['enable_float16']):
-                retval = model(ipts)
-                training_feat, visual_summary = retval['training_feat'], retval['visual_summary']
-                del retval
-            loss_sum, loss_info = model.loss_aggregator(training_feat)
-            ok = model.train_step(loss_sum)
-            if not ok:
-                continue
-
-            visual_summary.update(loss_info)
-            visual_summary['scalar/learning_rate'] = model.optimizer.param_groups[0]['lr']
-
-            model.msg_mgr.train_step(loss_info, visual_summary)
-            if model.iteration % model.engine_cfg['save_iter'] == 0:
-                # save the checkpoint
-                model.save_ckpt(model.iteration)
-
-                # run test if with_test = true
-                if model.engine_cfg['with_test']:
-                    model.msg_mgr.log_info("Running test...")
-                    model.eval()
-                    result_dict = BaseModel.run_test(model)
-                    model.train()
-                    if model.cfgs['trainer_cfg']['fix_BN']:
-                        model.fix_BN()
-                    if result_dict:
-                        model.msg_mgr.write_to_tensorboard(result_dict)
-                    model.msg_mgr.reset_time()
-            if model.iteration % model.engine_cfg['cluster_iter'] == 0 and model.engine_cfg['with_test']:
+        while True:
+            if model.engine_cfg['with_cluster']:
                 model.msg_mgr.log_info("Running cluster...")
                 model.eval()
                 BaseModel.run_cluster(model)
                 model.train()
-                model.msg_mgr.reset_time()   
-            if model.iteration >= model.engine_cfg['total_iter']:
-                break
+                model.msg_mgr.reset_time()
+
+            for inputs in model.train_loader:
+                ipts = model.inputs_pretreament(inputs)
+                with autocast(enabled=model.engine_cfg['enable_float16']):
+                    retval = model(ipts)
+                    training_feat, visual_summary = retval['training_feat'], retval['visual_summary']
+                    del retval
+                loss_sum, loss_info = model.loss_aggregator(training_feat)
+                ok = model.train_step(loss_sum)
+                if not ok:
+                    continue
+
+                visual_summary.update(loss_info)
+                visual_summary['scalar/learning_rate'] = model.optimizer.param_groups[0]['lr']
+
+                model.msg_mgr.train_step(loss_info, visual_summary)
+                if model.iteration % model.engine_cfg['save_iter'] == 0:
+                    # save the checkpoint
+                    model.save_ckpt(model.iteration)
+
+                    # run test if with_test = true
+                    if model.engine_cfg['with_test']:
+                        model.msg_mgr.log_info("Running test...")
+                        model.eval()
+                        result_dict = BaseModel.run_test(model)
+                        model.train()
+                        if model.cfgs['trainer_cfg']['fix_BN']:
+                            model.fix_BN()
+                        if result_dict:
+                            model.msg_mgr.write_to_tensorboard(result_dict)
+                        model.msg_mgr.reset_time()
+                if model.iteration % model.engine_cfg['cluster_iter'] == 0 and model.engine_cfg['with_test']:
+                    break
+                if model.iteration >= model.engine_cfg['total_iter']:
+                    return
 
     @ staticmethod
     def run_test(model):
@@ -500,4 +497,22 @@ class BaseModel(MetaModel, nn.Module):
             info_dict = model.inference(rank, model.cluster_loader)
         ref_embed, ref_label = model.train_loader.dataset.cluster(info_dict['embeddings'])
         model.loss_aggregator.update_clusters(ref_embed, ref_label)
+
+        loader = model.cluster_loader
+        label_list = loader.dataset.label_list
+        types_list = loader.dataset.types_list
+        views_list = loader.dataset.views_list
+        import pickle
+        with open('features.pkl', 'wb') as f:
+            features = np.array(info_dict['embeddings'])
+            pickle.dump(features, f)
+        with open('labels.pkl', 'wb') as f:
+            labels = np.array([int(i) for i in label_list])
+            pickle.dump(labels, f)
+        with open('types.pkl', 'wb') as f:
+            pickle.dump(types_list, f)
+        with open('views.pkl', 'wb') as f:
+            views = np.array([int(i) for i in views_list])
+            pickle.dump(views, f)
+
         return

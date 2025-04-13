@@ -62,7 +62,7 @@ class DeepGaitV2(BaseModel):
             self.layer4 = SetBlockWrapper(self.layer4)
 
         self.FCs = SeparateFCs(16, channels[3], channels[2])
-        self.BNNecks = SeparateBNNecks(16, channels[2], class_num=model_cfg['SeparateBNNecks']['class_num'])
+        # self.BNNecks = SeparateBNNecks(16, channels[2], class_num=model_cfg['SeparateBNNecks']['class_num'])
 
         self.TP = PackSequenceWrapper(torch.max)
         self.HPP = HorizontalPoolingPyramid(bin_num=[16])
@@ -114,17 +114,21 @@ class DeepGaitV2(BaseModel):
         feat = self.HPP(outs)  # [n, c, p]
 
         embed_1 = self.FCs(feat)  # [n, c, p]
-        embed_2, logits = self.BNNecks(embed_1)  # [n, c, p]
+        # embed_2, logits = self.BNNecks(embed_1)  # [n, c, p]
 
         if self.inference_use_emb2:
                 embed = embed_2
         else:
                 embed = embed_1
 
+        part1 = embed_1[:, :, :4]
+        part2 = embed_1[:, :, 12:]
+        embed = torch.cat([part1,part2], dim=2)
+
         retval = {
             'training_feat': {
-                'triplet': {'embeddings': embed_1, 'labels': labs},
-                'softmax': {'logits': logits, 'labels': labs}
+                'triplet': {'embeddings': embed, 'labels': labs},
+                # 'softmax': {'logits': logits, 'labels': labs}
             },
             'visual_summary': {
                 'image/sils': rearrange(sils, 'n c s h w -> (n s) c h w'),

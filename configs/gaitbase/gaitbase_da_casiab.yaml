@@ -5,7 +5,7 @@ data_cfg:
   num_workers: 1
   remove_no_gallery: false # Remove probe if no gallery for it
   test_dataset_name: CASIA-B
-  eps: 4
+  eps: 1.5
   min_samples: 8
 
 evaluator_cfg:
@@ -74,16 +74,16 @@ optimizer_cfg:
 scheduler_cfg:
   gamma: 0.1
   milestones: # Learning Rate Reduction at each milestones
-    - 100
     - 200
-    - 300
+    - 400
+    - 600
   scheduler: MultiStepLR
 trainer_cfg:
   enable_float16: true # half_percesion float for memory reduction and speedup
   fix_BN: false
   with_test: true
   with_cluster: true
-  cluster_iter: 100
+  cluster_iter: 200
   log_iter: 1
   restore_ckpt_strict: false
   restore_hint: 120000

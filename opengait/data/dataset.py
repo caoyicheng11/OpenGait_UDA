@@ -9,7 +9,7 @@ import pandas as pd
 from collections import defaultdict
 import numpy as np
 import torch
-
+from utils.faiss_rerank import compute_jaccard_distance
 
 class DataSet(tordata.Dataset):
     def __init__(self, data_cfg, training):
@@ -206,9 +206,11 @@ class DataSet(tordata.Dataset):
 
     def cluster(self, embeddings):
         features = embeddings.reshape(embeddings.shape[0], -1)
+        features = torch.Tensor(features).to('cuda')
+        dists = compute_jaccard_distance(features, search_option=3)
         dbscan = DBSCAN(eps=self.eps, min_samples=self.min_samples)
+        labels = dbscan.fit_predict(dists)
 
-        labels = dbscan.fit_predict(features)
         self.label_list = labels
         self.label_set = sorted([label for label in set(labels) if label != -1])
         self.indices_dict = {label: [] for label in self.label_set}
