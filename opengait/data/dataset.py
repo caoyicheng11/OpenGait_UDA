@@ -4,6 +4,11 @@ import os.path as osp
 import torch.utils.data as tordata
 import json
 from utils import get_msg_mgr
+from sklearn.cluster import DBSCAN
+import pandas as pd
+from collections import defaultdict
+import numpy as np
+import torch
 
 
 class DataSet(tordata.Dataset):
@@ -14,6 +19,8 @@ class DataSet(tordata.Dataset):
         """
         self.__dataset_parser(data_cfg, training)
         self.cache = data_cfg['cache']
+        self.eps = data_cfg['eps']
+        self.min_samples = data_cfg['min_samples']
         self.label_list = [seq_info[0] for seq_info in self.seqs_info]
         self.types_list = [seq_info[1] for seq_info in self.seqs_info]
         self.views_list = [seq_info[2] for seq_info in self.seqs_info]
@@ -23,6 +30,10 @@ class DataSet(tordata.Dataset):
         self.views_set = sorted(list(set(self.views_list)))
         self.seqs_data = [None] * len(self)
         self.indices_dict = {label: [] for label in self.label_set}
+
+        self.ground_truth = self.label_list
+        self.ground_set = sorted(list(set(self.label_list)))
+
         for i, seq_info in enumerate(self.seqs_info):
             self.indices_dict[seq_info[0]].append(i)
         if self.cache:
@@ -123,3 +134,91 @@ class DataSet(tordata.Dataset):
 
         self.seqs_info = get_seqs_info_list(
             train_set) if training else get_seqs_info_list(test_set)
+    
+    def __calculate_accuracy(self):
+        msg_mgr = get_msg_mgr()
+
+        msg_mgr.log_info(f'Number of cluster: {len(self.label_set)}')
+        msg_mgr.log_info(f'Number of noise: {np.sum(self.label_list == -1)}')
+
+        df = pd.DataFrame({"label": self.ground_truth, "pseudo_label": self.label_list})
+        df = df[df["pseudo_label"] != -1]
+
+        pl_to_main_label = {}
+        for pl in df["pseudo_label"].unique():
+            sub_df = df[df["pseudo_label"] == pl]
+            main_label = sub_df["label"].mode()[0]
+            pl_to_main_label[pl] = main_label
+
+        main_label_to_pl = defaultdict(set)
+        for pl, main_label in pl_to_main_label.items():
+            main_label_to_pl[main_label].add(pl)
+
+        valid_pseudo_labels = set()
+        for main_label, pls in main_label_to_pl.items():
+            valid_pseudo_labels.update(pls)
+
+        valid_samples = df[df["pseudo_label"].isin(valid_pseudo_labels)]
+        valid_count = len(valid_samples)
+
+        total_count = len(df)
+
+        unique_accuracy = valid_count / total_count
+
+        correct_count = 0
+        for idx, row in valid_samples.iterrows():
+            if pl_to_main_label[row["pseudo_label"]] == row["label"]:
+                correct_count += 1
+
+        final_accuracy = correct_count / total_count
+        msg_mgr.log_info(f'Cluster accuracy: {final_accuracy}')
+
+        type_stats = defaultdict(lambda: {"total": 0, "valid": 0})
+    
+        for label, type_ in zip(self.label_list, self.types_list):
+            type_stats[type_[:2]]["total"] += 1
+            if label != -1:
+                type_stats[type_[:2]]["valid"] += 1
+        for type_, stats in type_stats.items():
+            ratio = stats["valid"] / stats["total"]
+            print(f"{type_}: {ratio:.2%} ({stats['valid']}/{stats['total']})")
+
+        return
+
+    def __get_cluster_centers(self, embeddings, labels):
+        valid_mask = (self.label_list != -1)
+        embeddings = embeddings[valid_mask]
+        labels = labels[valid_mask]
+
+        ref_embed = []
+        ref_label = []
+
+        for label in self.label_set:
+            class_embeddings = embeddings[labels == label]
+            class_mean = np.mean(class_embeddings, axis=0)
+            ref_embed.append(class_mean)
+            ref_label.append(label)
+
+        ref_embed = torch.tensor(np.array(ref_embed), dtype=torch.float16).to('cuda')
+        ref_label = torch.tensor(np.array(ref_label), dtype=torch.int64).to('cuda')
+
+        return ref_embed, ref_label
+
+    def cluster(self, embeddings):
+        features = embeddings.reshape(embeddings.shape[0], -1)
+        dbscan = DBSCAN(eps=self.eps, min_samples=self.min_samples)
+
+        labels = dbscan.fit_predict(features)
+        self.label_list = labels
+        self.label_set = sorted([label for label in set(labels) if label != -1])
+        self.indices_dict = {label: [] for label in self.label_set}
+        for i, label in enumerate(labels):
+            if label == -1:
+                continue
+            self.indices_dict[label].append(i)
+
+        for i, seq_info in enumerate(self.seqs_info):
+            seq_info[0] = labels[i]
+
+        self.__calculate_accuracy()
+        return self.__get_cluster_centers(embeddings, labels)

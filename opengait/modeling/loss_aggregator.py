@@ -62,6 +62,10 @@ class LossAggregator(nn.Module):
         for k, v in training_feats.items():
             if k in self.losses:
                 loss_func = self.losses[k]
+
+                v['ref_embed'] = self.ref_embed
+                v['ref_label'] = self.ref_label
+
                 loss, info = loss_func(**v)
                 for name, value in info.items():
                     loss_info['scalar/%s/%s' % (k, name)] = value
@@ -84,3 +88,8 @@ class LossAggregator(nn.Module):
                         "Error type for -Trainng-Feat-, supported: A feature dict or loss tensor.")
 
         return loss_sum, loss_info
+
+    def update_clusters(self, ref_embed, ref_label):
+        self.ref_embed = ref_embed
+        self.ref_label = ref_label
+        return

@@ -41,7 +41,10 @@ class CollateFn(object):
 
         for bt in batch:
             seqs_batch.append(bt[0])
-            labs_batch.append(self.label_set.index(bt[1][0]))
+            if type(bt[1][0]) is str:
+                labs_batch.append(self.label_set.index(bt[1][0]))
+            else:
+                labs_batch.append(bt[1][0])
             typs_batch.append(bt[1][1])
             vies_batch.append(bt[1][2])
 

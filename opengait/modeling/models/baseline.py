@@ -11,7 +11,7 @@ class Baseline(BaseModel):
         self.Backbone = self.get_backbone(model_cfg['backbone_cfg'])
         self.Backbone = SetBlockWrapper(self.Backbone)
         self.FCs = SeparateFCs(**model_cfg['SeparateFCs'])
-        self.BNNecks = SeparateBNNecks(**model_cfg['SeparateBNNecks'])
+        # self.BNNecks = SeparateBNNecks(**model_cfg['SeparateBNNecks'])
         self.TP = PackSequenceWrapper(torch.max)
         self.HPP = HorizontalPoolingPyramid(bin_num=model_cfg['bin_num'])
 
@@ -33,19 +33,22 @@ class Baseline(BaseModel):
         feat = self.HPP(outs)  # [n, c, p]
 
         embed_1 = self.FCs(feat)  # [n, c, p]
-        embed_2, logits = self.BNNecks(embed_1)  # [n, c, p]
-        embed = embed_1
+        # embed_2, logits = self.BNNecks(embed_1)  # [n, c, p]
+
+        # part1 = embed_1[:, :, :4]
+        # part2 = embed_1[:, :, 12:]
+        # embed = torch.cat([part1,part2], dim=2)
 
         retval = {
             'training_feat': {
                 'triplet': {'embeddings': embed_1, 'labels': labs},
-                'softmax': {'logits': logits, 'labels': labs}
+                # 'softmax': {'embeddings': embed_1, 'labels': labs}
             },
             'visual_summary': {
                 'image/sils': rearrange(sils,'n c s h w -> (n s) c h w')
             },
             'inference_feat': {
-                'embeddings': embed
+                'embeddings': embed_1
             }
         }
         return retval

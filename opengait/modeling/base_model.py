@@ -149,12 +149,17 @@ class BaseModel(MetaModel, nn.Module):
         self.msg_mgr.log_info(cfgs['data_cfg'])
         if training:
             self.train_loader = self.get_loader(
-                cfgs['data_cfg'], train=True)
+                cfgs['data_cfg'], 'train')
         if not training or self.engine_cfg['with_test']:
             self.test_loader = self.get_loader(
-                cfgs['data_cfg'], train=False)
+                cfgs['data_cfg'], 'test')
             self.evaluator_trfs = get_transform(
                 cfgs['evaluator_cfg']['transform'])
+        if not training or self.engine_cfg['with_cluster']:
+            self.cluster_loader = self.get_loader(
+                cfgs['data_cfg'], 'cluster')
+            self.cluster_trfs = get_transform(
+                cfgs['cluster_cfg']['transform'])
 
         self.device = torch.distributed.get_rank()
         torch.cuda.set_device(self.device)
@@ -202,8 +207,16 @@ class BaseModel(MetaModel, nn.Module):
                     nn.init.normal_(m.weight.data, 1.0, 0.02)
                     nn.init.constant_(m.bias.data, 0.0)
 
-    def get_loader(self, data_cfg, train=True):
-        sampler_cfg = self.cfgs['trainer_cfg']['sampler'] if train else self.cfgs['evaluator_cfg']['sampler']
+    def get_loader(self, data_cfg, type):
+        if type == 'train':
+            sampler_cfg = self.cfgs['trainer_cfg']['sampler']
+            train = True
+        elif type == 'test':
+            sampler_cfg = self.cfgs['evaluator_cfg']['sampler']
+            train = False
+        elif type == 'cluster':
+            sampler_cfg = self.cfgs['cluster_cfg']['sampler']
+            train = True
         dataset = DataSet(data_cfg, train)
 
         Sampler = get_attr_from([Samplers], sampler_cfg['type'])
@@ -360,7 +373,7 @@ class BaseModel(MetaModel, nn.Module):
         self.scheduler.step()
         return True
 
-    def inference(self, rank):
+    def inference(self, rank, loader):
         """Inference all the test data.
 
         Args:
@@ -368,15 +381,15 @@ class BaseModel(MetaModel, nn.Module):
         Returns:
             Odict: contains the inference results.
         """
-        total_size = len(self.test_loader)
+        total_size = len(loader)
         if rank == 0:
             pbar = tqdm(total=total_size, desc='Transforming')
         else:
             pbar = NoOp()
-        batch_size = self.test_loader.batch_sampler.batch_size
+        batch_size = loader.batch_sampler.batch_size
         rest_size = total_size
         info_dict = Odict()
-        for inputs in self.test_loader:
+        for inputs in loader:
             ipts = self.inputs_pretreament(inputs)
             with autocast(enabled=self.engine_cfg['enable_float16']):
                 retval = self.forward(ipts)
@@ -402,6 +415,13 @@ class BaseModel(MetaModel, nn.Module):
     @ staticmethod
     def run_train(model):
         """Accept the instance object(model) here, and then run the train loop."""
+        if model.engine_cfg['with_cluster']:
+            model.msg_mgr.log_info("Running cluster...")
+            model.eval()
+            BaseModel.run_cluster(model)
+            model.train()
+            model.msg_mgr.reset_time()
+
         for inputs in model.train_loader:
             ipts = model.inputs_pretreament(inputs)
             with autocast(enabled=model.engine_cfg['enable_float16']):
@@ -432,6 +452,12 @@ class BaseModel(MetaModel, nn.Module):
                     if result_dict:
                         model.msg_mgr.write_to_tensorboard(result_dict)
                     model.msg_mgr.reset_time()
+            if model.iteration % model.engine_cfg['cluster_iter'] == 0 and model.engine_cfg['with_test']:
+                model.msg_mgr.log_info("Running cluster...")
+                model.eval()
+                BaseModel.run_cluster(model)
+                model.train()
+                model.msg_mgr.reset_time()   
             if model.iteration >= model.engine_cfg['total_iter']:
                 break
 
@@ -444,7 +470,7 @@ class BaseModel(MetaModel, nn.Module):
                 evaluator_cfg['sampler']['batch_size'], torch.distributed.get_world_size()))
         rank = torch.distributed.get_rank()
         with torch.no_grad():
-            info_dict = model.inference(rank)
+            info_dict = model.inference(rank, model.test_loader)
         if rank == 0:
             loader = model.test_loader
             label_list = loader.dataset.label_list
@@ -466,3 +492,12 @@ class BaseModel(MetaModel, nn.Module):
             except:
                 dataset_name = model.cfgs['data_cfg']['dataset_name']
             return eval_func(info_dict, dataset_name, **valid_args)
+
+    @ staticmethod
+    def run_cluster(model):
+        rank = torch.distributed.get_rank()
+        with torch.no_grad():
+            info_dict = model.inference(rank, model.cluster_loader)
+        ref_embed, ref_label = model.train_loader.dataset.cluster(info_dict['embeddings'])
+        model.loss_aggregator.update_clusters(ref_embed, ref_label)
+        return
