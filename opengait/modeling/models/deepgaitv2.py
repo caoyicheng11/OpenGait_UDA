@@ -63,9 +63,11 @@ class DeepGaitV2(BaseModel):
 
         self.FCs = SeparateFCs(16, channels[3], channels[2])
         # self.BNNecks = SeparateBNNecks(16, channels[2], class_num=model_cfg['SeparateBNNecks']['class_num'])
-
         self.TP = PackSequenceWrapper(torch.max)
         self.HPP = HorizontalPoolingPyramid(bin_num=[16])
+        self.alpha = nn.Parameter(torch.Tensor([0.9]))
+        # self.alpha = nn.Parameter(torch.Tensor([1.0, 1.0, 1.0, 1.0]))
+
 
     def make_layer(self, block, planes, stride, blocks_num, mode='2d'):
 
@@ -121,9 +123,32 @@ class DeepGaitV2(BaseModel):
         else:
                 embed = embed_1
 
-        part1 = embed_1[:, :, :4]
-        part2 = embed_1[:, :, 12:]
-        embed = torch.cat([part1,part2], dim=2)
+        # weight = torch.sigmoid(self.alpha)
+        weight = self.alpha
+        if self.training:
+            print(weight)
+        head = embed_1[:, :, :4]
+        body = embed_1[:, :, 4:-4]
+        foot = embed_1[:, :, -4:]
+        part1 = torch.cat([head,foot], dim=2)
+        part2 = body
+        embed = part1 * weight + part2 * (1 - weight)
+        # embed = torch.cat([part1 * weight, part2 * (1 - weight)], dim=2)
+
+        # # weights = torch.sigmoid(self.alpha)
+        # weights = self.alpha
+        # if self.training:
+        #     print(weights)
+        # part1 = embed_1[:, :, :4]
+        # part2 = embed_1[:, :, 4:8]
+        # part3 = embed_1[:, :, 8:-4]
+        # part4 = embed_1[:, :, -4:]
+        # embed = torch.cat([
+        #     part1*weights[0],
+        #     part2*weights[1],
+        #     part3*weights[2],
+        #     part4*weights[3],
+        # ], dim=2)
 
         retval = {
             'training_feat': {

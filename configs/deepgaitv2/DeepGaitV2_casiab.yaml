@@ -47,7 +47,7 @@ model_cfg:
     class_num: 74
 
 optimizer_cfg:
-  lr: 0.1
+  lr: 0.0001
   momentum: 0.9
   solver: SGD
   weight_decay: 0.0005
@@ -55,9 +55,9 @@ optimizer_cfg:
 scheduler_cfg:
   gamma: 0.1
   milestones: # Learning Rate Reduction at each milestones
+    - 200
     - 400
     - 600
-    - 800
   scheduler: MultiStepLR
 
 trainer_cfg:
@@ -66,6 +66,7 @@ trainer_cfg:
   log_iter: 10
   with_test: true
   with_cluster: true
+  optimizer_reset: true
   cluster_iter: 200
   restore_ckpt_strict: false
   restore_hint: 120000

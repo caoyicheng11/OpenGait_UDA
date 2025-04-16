@@ -138,18 +138,27 @@ class DataSet(tordata.Dataset):
     def __calculate_accuracy(self):
         msg_mgr = get_msg_mgr()
 
-        msg_mgr.log_info(f'Number of cluster: {len(self.label_set)}')
-        msg_mgr.log_info(f'Number of noise: {np.sum(self.label_list == -1)}')
+        # Overall statistics
+        msg_mgr.log_info(f'Number of clusters: {len(self.label_set)}')
+        msg_mgr.log_info(f'Number of noise points: {np.sum(self.label_list == -1)}')
 
-        df = pd.DataFrame({"label": self.ground_truth, "pseudo_label": self.label_list})
-        df = df[df["pseudo_label"] != -1]
-
+        df = pd.DataFrame({
+            "label": self.ground_truth,
+            "pseudo_label": self.label_list,
+            "type": self.types_list
+        })
+        
+        # Remove noise points for accuracy calculations
+        df_clean = df[df["pseudo_label"] != -1].copy()
+        
+        # Calculate mapping between pseudo labels and most common true labels
         pl_to_main_label = {}
-        for pl in df["pseudo_label"].unique():
-            sub_df = df[df["pseudo_label"] == pl]
+        for pl in df_clean["pseudo_label"].unique():
+            sub_df = df_clean[df_clean["pseudo_label"] == pl]
             main_label = sub_df["label"].mode()[0]
             pl_to_main_label[pl] = main_label
 
+        # Calculate valid pseudo labels (those that map to a unique true label)
         main_label_to_pl = defaultdict(set)
         for pl, main_label in pl_to_main_label.items():
             main_label_to_pl[main_label].add(pl)
@@ -158,32 +167,62 @@ class DataSet(tordata.Dataset):
         for main_label, pls in main_label_to_pl.items():
             valid_pseudo_labels.update(pls)
 
-        valid_samples = df[df["pseudo_label"].isin(valid_pseudo_labels)]
+        # Calculate overall accuracy
+        valid_samples = df_clean[df_clean["pseudo_label"].isin(valid_pseudo_labels)]
         valid_count = len(valid_samples)
-
-        total_count = len(df)
-
-        unique_accuracy = valid_count / total_count
-
+        total_count = len(df_clean)
+        
         correct_count = 0
         for idx, row in valid_samples.iterrows():
             if pl_to_main_label[row["pseudo_label"]] == row["label"]:
                 correct_count += 1
 
         final_accuracy = correct_count / total_count
-        msg_mgr.log_info(f'Cluster accuracy: {final_accuracy}')
+        msg_mgr.log_info(f'Overall cluster accuracy: {final_accuracy:.4f}')
+        
+        # Calculate statistics by type/category
+        type_stats = defaultdict(lambda: {
+            "total": 0,
+            "noise": 0,
+            "valid": 0,
+            "correct": 0,
+            "clusters": set(),
+            "unique_labels": set()
+        })
+        
+        # First pass: collect basic statistics
+        for label, pseudo_label, type_ in zip(self.label_list, self.label_list, self.types_list):
+            type_key = type_[:2]  # Adjust this based on how you want to categorize
+            stats = type_stats[type_key]
+            stats["total"] += 1
+            stats["unique_labels"].add(label)
+            if pseudo_label == -1:
+                stats["noise"] += 1
+            else:
+                stats["valid"] += 1
+                stats["clusters"].add(pseudo_label)
+        
+        # Second pass: calculate accuracy per type
+        for idx, row in df.iterrows():
+            type_key = row["type"][:2]
+            stats = type_stats[type_key]
+            if row["pseudo_label"] != -1 and row["pseudo_label"] in valid_pseudo_labels:
+                if pl_to_main_label[row["pseudo_label"]] == row["label"]:
+                    stats["correct"] += 1
+        
+        # Report detailed statistics by type
+        msg_mgr.log_info("Detailed statistics by type:")
+        for type_, stats in sorted(type_stats.items()):
+            noise_ratio = stats["noise"] / stats["total"]
+            valid_ratio = stats["valid"] / stats["total"]
+            accuracy = stats["correct"] / stats["valid"] if stats["valid"] > 0 else 0
+            
+            msg_mgr.log_info(f"Type: {type_}")
+            msg_mgr.log_info(f"Unique true labels: {len(stats['unique_labels'])}, Clusters assigned: {len(stats['clusters'])}")
+            msg_mgr.log_info(f"Noise ratio: {noise_ratio:.2%} ({stats['noise']}/{stats['total']}), Valid ratio: {valid_ratio:.2%} ({stats['valid']}/{stats['total']})")
+            msg_mgr.log_info(f"Accuracy: {accuracy:.2%} ({stats['correct']}/{stats['valid']})")
 
-        type_stats = defaultdict(lambda: {"total": 0, "valid": 0})
-    
-        for label, type_ in zip(self.label_list, self.types_list):
-            type_stats[type_[:2]]["total"] += 1
-            if label != -1:
-                type_stats[type_[:2]]["valid"] += 1
-        for type_, stats in type_stats.items():
-            ratio = stats["valid"] / stats["total"]
-            print(f"{type_}: {ratio:.2%} ({stats['valid']}/{stats['total']})")
-
-        return
+        return final_accuracy
 
     def __get_cluster_centers(self, embeddings, labels):
         valid_mask = (self.label_list != -1)
