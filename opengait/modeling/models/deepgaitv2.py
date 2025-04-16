@@ -123,7 +123,6 @@ class DeepGaitV2(BaseModel):
         else:
                 embed = embed_1
 
-        # weight = torch.sigmoid(self.alpha)
         weight = self.alpha
         if self.training:
             print(weight)
@@ -133,22 +132,6 @@ class DeepGaitV2(BaseModel):
         part1 = torch.cat([head,foot], dim=2)
         part2 = body
         embed = part1 * weight + part2 * (1 - weight)
-        # embed = torch.cat([part1 * weight, part2 * (1 - weight)], dim=2)
-
-        # # weights = torch.sigmoid(self.alpha)
-        # weights = self.alpha
-        # if self.training:
-        #     print(weights)
-        # part1 = embed_1[:, :, :4]
-        # part2 = embed_1[:, :, 4:8]
-        # part3 = embed_1[:, :, 8:-4]
-        # part4 = embed_1[:, :, -4:]
-        # embed = torch.cat([
-        #     part1*weights[0],
-        #     part2*weights[1],
-        #     part3*weights[2],
-        #     part4*weights[3],
-        # ], dim=2)
 
         retval = {
             'training_feat': {
