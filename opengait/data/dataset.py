@@ -243,23 +243,29 @@ class DataSet(tordata.Dataset):
 
         return ref_embed, ref_label
 
-    def cluster(self, embeddings):
+    def cluster(self, embeddings, indices):
         features = embeddings.reshape(embeddings.shape[0], -1)
         features = torch.Tensor(features).to('cuda')
         dists = compute_jaccard_distance(features, search_option=3)
         dbscan = DBSCAN(eps=self.eps, min_samples=self.min_samples)
         labels = dbscan.fit_predict(dists)
 
-        self.label_list = labels
+        cnt = 0
+        self.label_list = [-1 for _ in range(len(self.label_list))]
+        for idx in indices:
+            self.label_list[idx] = labels[cnt]
+            cnt += 1
+
         self.label_set = sorted([label for label in set(labels) if label != -1])
         self.indices_dict = {label: [] for label in self.label_set}
-        for i, label in enumerate(labels):
+
+        for i, label in enumerate(self.label_list):
             if label == -1:
                 continue
             self.indices_dict[label].append(i)
 
         for i, seq_info in enumerate(self.seqs_info):
-            seq_info[0] = labels[i]
+           seq_info[0] = self.label_list[i]
 
         self.__calculate_accuracy()
         return self.__get_cluster_centers(embeddings, labels)

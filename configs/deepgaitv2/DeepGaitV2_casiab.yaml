@@ -1,11 +1,11 @@
 data_cfg:
   dataset_name: CASIA-B
-  dataset_root: ./datasets/CASIA-B
-  dataset_partition: ./datasets/CASIA-B/CASIA-B.json
+  dataset_root: /root/autodl-tmp/CASIA-B
+  dataset_partition: /root/autodl-tmp/CASIA-B/CASIA-B.json
   num_workers: 1
   remove_no_gallery: false # Remove probe if no gallery for it
   test_dataset_name: CASIA-B
-  eps: 2
+  eps: 1.5
   min_samples: 8
 
 evaluator_cfg:
@@ -43,11 +43,9 @@ model_cfg:
       - 128 
       - 256
       - 512
-  SeparateBNNecks:
-    class_num: 74
 
 optimizer_cfg:
-  lr: 0.0001
+  lr: 0.001
   momentum: 0.9
   solver: SGD
   weight_decay: 0.0005
@@ -55,9 +53,9 @@ optimizer_cfg:
 scheduler_cfg:
   gamma: 0.1
   milestones: # Learning Rate Reduction at each milestones
-    - 200
-    - 400
+    - 300
     - 600
+    - 900
   scheduler: MultiStepLR
 
 trainer_cfg:
@@ -67,7 +65,7 @@ trainer_cfg:
   with_test: true
   with_cluster: true
   optimizer_reset: true
-  cluster_iter: 200
+  cluster_iter: 300
   restore_ckpt_strict: false
   restore_hint: 120000
   save_iter: 100
@@ -75,12 +73,12 @@ trainer_cfg:
   sync_BN: true
   total_iter: 60000000
   sampler:
-    batch_shuffle: true
+    batch_shuffle: false
     batch_size:
       - 4 # TripletSampler, batch_size[0] indicates Number of Identity
       - 8 #                 batch_size[1] indicates Samples sequqnce for each Identity
-    frames_num_fixed: 30 # fixed frames number for training
-    frames_skip_num: 4
+    frames_num_fixed: 60 # fixed frames number for training
+    frames_skip_num: 0
     sample_type: fixed_ordered # fixed control input frames number, unordered for controlling order of input tensor; Other options: unfixed_ordered or all_ordered
     type: TripletSampler
   transform:

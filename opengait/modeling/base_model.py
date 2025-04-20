@@ -373,7 +373,7 @@ class BaseModel(MetaModel, nn.Module):
         self.scheduler.step()
         return True
 
-    def inference(self, rank, loader):
+    def inference(self, rank, loader, indices=None):
         """Inference all the test data.
 
         Args:
@@ -381,7 +381,12 @@ class BaseModel(MetaModel, nn.Module):
         Returns:
             Odict: contains the inference results.
         """
-        total_size = len(loader)
+        if indices is None:
+            total_size = len(loader)
+        else:
+            total_size = len(indices)
+            loader.batch_sampler.update_indices(indices)
+        
         if rank == 0:
             pbar = tqdm(total=total_size, desc='Transforming')
         else:
@@ -493,26 +498,14 @@ class BaseModel(MetaModel, nn.Module):
     @ staticmethod
     def run_cluster(model):
         rank = torch.distributed.get_rank()
+        num_dataset = len(model.cluster_loader.dataset)
+        num_samples = min(20000, num_dataset)
+        # random_indices = np.random.choice(num_dataset, size=num_samples, replace=False)
+        random_indices = np.array([i for i in range(num_samples)])
+        sorted_indices = np.sort(random_indices)
+
         with torch.no_grad():
-            info_dict = model.inference(rank, model.cluster_loader)
-        ref_embed, ref_label = model.train_loader.dataset.cluster(info_dict['embeddings'])
+            info_dict = model.inference(rank, model.cluster_loader, sorted_indices)
+        ref_embed, ref_label = model.train_loader.dataset.cluster(info_dict['embeddings'], sorted_indices)
         model.loss_aggregator.update_clusters(ref_embed, ref_label)
-
-        loader = model.cluster_loader
-        label_list = loader.dataset.label_list
-        types_list = loader.dataset.types_list
-        views_list = loader.dataset.views_list
-        import pickle
-        with open('features.pkl', 'wb') as f:
-            features = np.array(info_dict['embeddings'])
-            pickle.dump(features, f)
-        with open('labels.pkl', 'wb') as f:
-            labels = np.array([int(i) for i in label_list])
-            pickle.dump(labels, f)
-        with open('types.pkl', 'wb') as f:
-            pickle.dump(types_list, f)
-        with open('views.pkl', 'wb') as f:
-            views = np.array([int(i) for i in views_list])
-            pickle.dump(views, f)
-
         return

@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from ..base_model import BaseModel
 from ..modules import SetBlockWrapper, HorizontalPoolingPyramid, PackSequenceWrapper, SeparateFCs, SeparateBNNecks, conv1x1, conv3x3, BasicBlock2D, BasicBlockP3D, BasicBlock3D
 
+from utils import np2var, list2var, get_valid_args, ddp_all_gather
+from data.transform import get_transform
 from einops import rearrange
 
 blocks_map = {
@@ -18,6 +20,34 @@ blocks_map = {
 }
 
 class DeepGaitV2(BaseModel):
+    def inputs_pretreament(self, inputs):
+        if self.training:
+            seqs_batch, labs_batch, typs_batch, vies_batch, seqL_batch = inputs
+            trf_cfgs = self.engine_cfg['transform']
+            seq_trfs = get_transform(trf_cfgs)
+
+            requires_grad = True if self.training else False
+            seq_size = int(len(seqs_batch[0][0]) / 2)
+            img_q = [np2var(np.asarray([trf(fra) for fra in np.asarray(seq)[:, :seq_size]]), requires_grad=requires_grad).float()  for trf, seq in zip(seq_trfs, seqs_batch)]
+            img_k = [np2var(np.asarray([trf(fra) for fra in np.asarray(seq)[:, seq_size:]]), requires_grad=requires_grad).float()  for trf, seq in zip(seq_trfs, seqs_batch)]
+            seqs = [torch.cat([img_q[0], img_k[0]], dim=0)]
+
+            typs = typs_batch
+            vies = vies_batch
+
+            labs = list2var(labs_batch).long()
+            labs = torch.cat([labs, labs], dim=0)
+
+            if seqL_batch is not None:
+                seqL_batch = np2var(seqL_batch).int()
+            seqL = seqL_batch
+
+            ipts = seqs
+            del seqs
+
+            return ipts, labs, typs, vies, seqL
+        else:
+            return super().inputs_pretreament(inputs)
 
     def build_network(self, model_cfg):
         mode = model_cfg['Backbone']['mode']
@@ -66,7 +96,6 @@ class DeepGaitV2(BaseModel):
         self.TP = PackSequenceWrapper(torch.max)
         self.HPP = HorizontalPoolingPyramid(bin_num=[16])
         self.alpha = nn.Parameter(torch.Tensor([0.9]))
-        # self.alpha = nn.Parameter(torch.Tensor([1.0, 1.0, 1.0, 1.0]))
 
 
     def make_layer(self, block, planes, stride, blocks_num, mode='2d'):
@@ -124,8 +153,6 @@ class DeepGaitV2(BaseModel):
                 embed = embed_1
 
         weight = self.alpha
-        if self.training:
-            print(weight)
         head = embed_1[:, :, :4]
         body = embed_1[:, :, 4:-4]
         foot = embed_1[:, :, -4:]

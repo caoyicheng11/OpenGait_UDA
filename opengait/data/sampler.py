@@ -87,13 +87,19 @@ class InferenceSampler(tordata.sampler.Sampler):
             self.size = complement_size
 
         batch_size_per_rank = int(self.batch_size / world_size)
-        indx_batch_per_rank = []
+        self.indx_batch_per_rank = []
 
         for i in range(int(self.size / batch_size_per_rank)):
-            indx_batch_per_rank.append(
+            self.indx_batch_per_rank.append(
                 indices[i*batch_size_per_rank:(i+1)*batch_size_per_rank])
 
-        self.idx_batch_this_rank = indx_batch_per_rank[rank::world_size]
+        self.idx_batch_this_rank = self.indx_batch_per_rank[rank::world_size]
+
+    def update_indices(self, indices):
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        self.idx_batch_this_rank = [self.indx_batch_per_rank[i] for i in indices]
+        self.idx_batch_this_rank = self.idx_batch_this_rank[rank::world_size]
 
     def __iter__(self):
         yield from self.idx_batch_this_rank
