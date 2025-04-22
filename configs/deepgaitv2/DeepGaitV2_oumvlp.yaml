@@ -1,17 +1,17 @@
 data_cfg:
   dataset_name: OUMVLP
-  dataset_root: ./datasets/OUMVLP
-  dataset_partition: ./datasets/OUMVLP/OUMVLP.json
+  dataset_root: /root/autodl-tmp/OUMVLP
+  dataset_partition: /root/autodl-tmp//OUMVLP/OUMVLP.json
   num_workers: 1
   remove_no_gallery: false # Remove probe if no gallery for it
   test_dataset_name: OUMVLP
-  eps: 2
-  min_samples: 8
+  eps: 0.5
+  min_samples: 4
 
 evaluator_cfg:
-  enable_float16: true
+  enable_float16: false
   restore_ckpt_strict: false
-  restore_hint: 120000
+  restore_hint: 50000
   save_name: DeepGaitV2
   sampler:
     batch_shuffle: false
@@ -53,9 +53,9 @@ optimizer_cfg:
 scheduler_cfg:
   gamma: 0.1
   milestones: # Learning Rate Reduction at each milestones
-    - 200
-    - 400
-    - 600
+    - 50300
+    - 50600
+    - 50900
   scheduler: MultiStepLR
 
 trainer_cfg:
@@ -65,20 +65,20 @@ trainer_cfg:
   with_test: true
   with_cluster: true
   optimizer_reset: true
-  cluster_iter: 1000
+  cluster_iter: 500
   restore_ckpt_strict: false
   restore_hint: 60000
-  save_iter: 500
+  save_iter: 200
   save_name: DeepGaitV2
   sync_BN: true
   total_iter: 1200000
   sampler:
     batch_shuffle: true
     batch_size:
-      - 4 # TripletSampler, batch_size[0] indicates Number of Identity
-      - 8 #                 batch_size[1] indicates Samples sequqnce for each Identity
-    frames_num_fixed: 30 # fixed frames number for training
-    frames_skip_num: 4
+      - 8 # TripletSampler, batch_size[0] indicates Number of Identity
+      - 4 #                 batch_size[1] indicates Samples sequqnce for each Identity
+    frames_num_fixed: 60 # fixed frames number for training
+    frames_skip_num: 0
     sample_type: fixed_ordered # fixed control input frames number, unordered for controlling order of input tensor; Other options: unfixed_ordered or all_ordered
     type: TripletSampler
   transform:

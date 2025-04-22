@@ -247,7 +247,8 @@ class DataSet(tordata.Dataset):
         features = embeddings.reshape(embeddings.shape[0], -1)
         features = torch.Tensor(features).to('cuda')
         dists = compute_jaccard_distance(features, search_option=3)
-        dbscan = DBSCAN(eps=self.eps, min_samples=self.min_samples)
+        dbscan = DBSCAN(eps=self.eps, min_samples=self.min_samples, metric='precomputed', n_jobs=-1)
+        self.eps += 0.05
         labels = dbscan.fit_predict(dists)
 
         cnt = 0
@@ -259,13 +260,52 @@ class DataSet(tordata.Dataset):
         self.label_set = sorted([label for label in set(labels) if label != -1])
         self.indices_dict = {label: [] for label in self.label_set}
 
-        for i, label in enumerate(self.label_list):
-            if label == -1:
-                continue
-            self.indices_dict[label].append(i)
+        # 获取聚类中心
+        ref_embed, ref_label = self.__get_cluster_centers(embeddings, labels)
+        self.cluster_centers = dict(zip(ref_label.cpu().numpy(), ref_embed.reshape(ref_embed.shape[0], -1)))
+
+        # 添加相似度统计功能
+        # cluster_stats = {}  # 用于存储每个cluster的相似度统计信息
+
+        # 计算每个样本与对应聚类中心的相似度
+        for label in self.label_set:
+            cluster_indices = [i for i, lbl in enumerate(self.label_list) if lbl == label]
+            # similarities = []
+            
+            for idx in cluster_indices:
+                center = self.cluster_centers[label]
+                similarity = torch.nn.functional.cosine_similarity(
+                    features[idx].unsqueeze(0), center.unsqueeze(0), dim=1).item()
+                # similarities.append(similarity)
+                self.indices_dict[label].append((idx, similarity))
+            
+            # # 计算统计指标
+            # if similarities:  # 确保列表不为空
+            #     cluster_stats[label] = {
+            #         'mean': np.mean(similarities),
+            #         'max': np.max(similarities),
+            #         'min': np.min(similarities),
+            #         'count': len(similarities)
+            #     }
+        
+        # # 打印相似度统计信息
+        # print("\nCluster Similarity Statistics:")
+        # print("{:<10} {:<10} {:<10} {:<10} {:<10}".format(
+        #     "Cluster", "Count", "Min Sim", "Max Sim", "Avg Sim"))
+        # for label, stats in cluster_stats.items():
+        #     print("{:<10} {:<10} {:<10.4f} {:<10.4f} {:<10.4f}".format(
+        #         label, stats['count'], stats['min'], stats['max'], stats['mean']))
+        
+        # # 全局统计
+        # all_similarities = [sim for label in self.label_set 
+        #                 for (_, sim) in self.indices_dict[label]]
+        # if all_similarities:
+        #     print("\nGlobal Similarity Stats:")
+        #     print("Min: {:.4f}, Max: {:.4f}, Avg: {:.4f}".format(
+        #         min(all_similarities), max(all_similarities), np.mean(all_similarities)))
 
         for i, seq_info in enumerate(self.seqs_info):
-           seq_info[0] = self.label_list[i]
+            seq_info[0] = self.label_list[i]
 
         self.__calculate_accuracy()
-        return self.__get_cluster_centers(embeddings, labels)
+        return ref_embed, ref_label

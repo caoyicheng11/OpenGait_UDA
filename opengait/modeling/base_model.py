@@ -499,9 +499,9 @@ class BaseModel(MetaModel, nn.Module):
     def run_cluster(model):
         rank = torch.distributed.get_rank()
         num_dataset = len(model.cluster_loader.dataset)
-        num_samples = min(20000, num_dataset)
-        # random_indices = np.random.choice(num_dataset, size=num_samples, replace=False)
-        random_indices = np.array([i for i in range(num_samples)])
+        num_samples = min(10000, num_dataset)
+        random_indices = np.random.choice(num_dataset, size=num_samples, replace=False)
+        # random_indices = np.array([i for i in range(num_samples)])
         sorted_indices = np.sort(random_indices)
 
         with torch.no_grad():

@@ -1,39 +1,33 @@
 # Note  : *** the batch_size should be equal to the gpus number at the test phase!!! ***
 data_cfg:
   dataset_name: CASIA-B
-  dataset_root: ./datasets/CASIA-B
-  dataset_partition: ./datasets/CASIA-B/CASIA-B.json
+  dataset_root: /root/autodl-tmp/CASIA-B
+  dataset_partition: /root/autodl-tmp/CASIA-B/CASIA-B.json
   num_workers: 1
   remove_no_gallery: false
   test_dataset_name: CASIA-B
-  eps: 1.5
-  min_samples: 8
+  eps: 0.8
+  min_samples: 4
 
 evaluator_cfg:
-  enable_float16: false 
-  restore_ckpt_strict: true
-  restore_hint: 80000
+  enable_float16: true 
+  restore_ckpt_strict: false
+  restore_hint: 210000
   save_name: GaitGL
   sampler:
-    batch_size: 4
+    batch_size: 1
     sample_type: all_ordered
     type: InferenceSampler
 
 loss_cfg:
   - loss_term_weight: 1.0
     margin: 0.2
-    type: TripletLoss
+    type: ClusterTripletLoss
     log_prefix: triplet
-  - loss_term_weight: 1.0
-    scale: 1
-    type: CrossEntropyLoss
-    log_accuracy: true
-    label_smooth: false
-    log_prefix: softmax
 
 model_cfg:
   model: GaitGL
-  channels: [32, 64, 128]
+  channels: [32, 64, 128, 256]
   class_num: 74
 
 optimizer_cfg:
@@ -44,21 +38,24 @@ optimizer_cfg:
 scheduler_cfg:
   gamma: 0.1
   milestones:
-    - 70000
+    - 210000
+    - 210300
+    - 210600
   scheduler: MultiStepLR
 
 trainer_cfg:
   enable_float16: true
   with_test: true
   with_cluster: true
-  cluster_iter: 200
-  log_iter: 100
-  restore_ckpt_strict: true
+  cluster_iter: 300
+  log_iter: 10
+  restore_ckpt_strict: false
+  optimizer_reset: true
   restore_hint: 210000
-  save_iter: 10
+  save_iter: 100
   save_name: GaitGL
   sync_BN: true
-  total_iter: 800000000
+  total_iter: 212100
   sampler:
     batch_shuffle: true
     batch_size:

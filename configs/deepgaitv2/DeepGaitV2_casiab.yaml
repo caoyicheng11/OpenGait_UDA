@@ -5,13 +5,13 @@ data_cfg:
   num_workers: 1
   remove_no_gallery: false # Remove probe if no gallery for it
   test_dataset_name: CASIA-B
-  eps: 1.5
-  min_samples: 8
+  eps: 0.8
+  min_samples: 4
 
 evaluator_cfg:
   enable_float16: true
   restore_ckpt_strict: false
-  restore_hint: 120000
+  restore_hint: 122100
   save_name: DeepGaitV2
   sampler:
     batch_shuffle: false
@@ -45,7 +45,7 @@ model_cfg:
       - 512
 
 optimizer_cfg:
-  lr: 0.001
+  lr: 0.00001
   momentum: 0.9
   solver: SGD
   weight_decay: 0.0005
@@ -53,30 +53,30 @@ optimizer_cfg:
 scheduler_cfg:
   gamma: 0.1
   milestones: # Learning Rate Reduction at each milestones
-    - 300
-    - 600
-    - 900
+    - 120300
+    - 120600
+    - 120900
   scheduler: MultiStepLR
 
 trainer_cfg:
   enable_float16: true # half_percesion float for memory reduction and speedup
-  fix_BN: false
-  log_iter: 10
+  fix_BN: true
+  log_iter: 100
   with_test: true
   with_cluster: true
-  optimizer_reset: true
+  # optimizer_reset: true
   cluster_iter: 300
   restore_ckpt_strict: false
   restore_hint: 120000
-  save_iter: 100
+  save_iter: 300
   save_name: DeepGaitV2
   sync_BN: true
-  total_iter: 60000000
+  total_iter: 122100
   sampler:
     batch_shuffle: false
     batch_size:
-      - 4 # TripletSampler, batch_size[0] indicates Number of Identity
-      - 8 #                 batch_size[1] indicates Samples sequqnce for each Identity
+      - 8 # TripletSampler, batch_size[0] indicates Number of Identity
+      - 4 #                 batch_size[1] indicates Samples sequqnce for each Identity
     frames_num_fixed: 60 # fixed frames number for training
     frames_skip_num: 0
     sample_type: fixed_ordered # fixed control input frames number, unordered for controlling order of input tensor; Other options: unfixed_ordered or all_ordered

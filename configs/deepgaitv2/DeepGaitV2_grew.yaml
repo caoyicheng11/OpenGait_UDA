@@ -5,7 +5,7 @@ data_cfg:
   num_workers: 1
   remove_no_gallery: false # Remove probe if no gallery for it
   test_dataset_name: GREW
-  eps: 1.0
+  eps: 0.7
   min_samples: 4
 
 evaluator_cfg:
@@ -55,9 +55,9 @@ optimizer_cfg:
 scheduler_cfg:
   gamma: 0.1
   milestones: # Learning Rate Reduction at each milestones
+    - 100
+    - 200
     - 300
-    - 600
-    - 900
   scheduler: MultiStepLR
 
 trainer_cfg:
