@@ -4,7 +4,9 @@ import torch.nn as nn
 
 from ..base_model import BaseModel
 from ..modules import SeparateFCs, BasicConv2d, SetBlockWrapper, HorizontalPoolingPyramid, PackSequenceWrapper
-
+import numpy as np
+from utils import np2var, list2var, get_valid_args, ddp_all_gather
+from data.transform import get_transform
 
 class GaitSet(BaseModel):
     """
@@ -12,6 +14,36 @@ class GaitSet(BaseModel):
         Arxiv:  https://arxiv.org/abs/1811.06186
         Github: https://github.com/AbnerHqC/GaitSet
     """
+
+    def inputs_pretreament(self, inputs):
+        if self.training:
+            seqs_batch, labs_batch, typs_batch, vies_batch, seqL_batch = inputs
+            trf_cfgs = self.engine_cfg['transform']
+            seq_trfs = get_transform(trf_cfgs)
+
+            requires_grad = True if self.training else False
+            seq_size = int(len(seqs_batch[0][0]) / 2)
+            img_q = [np2var(np.asarray([trf(fra) for fra in np.asarray(seq)[:, :seq_size]]), requires_grad=requires_grad).float()  for trf, seq in zip(seq_trfs, seqs_batch)]
+            img_k = [np2var(np.asarray([trf(fra) for fra in np.asarray(seq)[:, seq_size:]]), requires_grad=requires_grad).float()  for trf, seq in zip(seq_trfs, seqs_batch)]
+            seqs = [torch.cat([img_q[0], img_k[0]], dim=0)]
+
+            typs = typs_batch
+            vies = vies_batch
+
+            labs = list2var(labs_batch).long()
+            labs = torch.cat([labs, labs], dim=0)
+
+            if seqL_batch is not None:
+                seqL_batch = np2var(seqL_batch).int()
+            seqL = seqL_batch
+
+            ipts = seqs
+            del seqs
+
+            return ipts, labs, typs, vies, seqL
+        else:
+            return super().inputs_pretreament(inputs)
+
 
     def build_network(self, model_cfg):
         in_c = model_cfg['in_channels']
@@ -44,6 +76,7 @@ class GaitSet(BaseModel):
         self.Head = SeparateFCs(**model_cfg['SeparateFCs'])
 
         self.HPP = HorizontalPoolingPyramid(bin_num=model_cfg['bin_num'])
+        self.alpha = nn.Parameter(torch.Tensor([0.9]))
 
     def forward(self, inputs):
         ipts, labs, _, _, seqL = inputs
@@ -70,16 +103,24 @@ class GaitSet(BaseModel):
         feature = torch.cat([feature1, feature2], -1)  # [n, c, p]
         embs = self.Head(feature)
 
+        weight = self.alpha
+        head = embs[:, :, :15]
+        body = embs[:, :, 15:-16]
+        foot = embs[:, :, -16:]
+        part1 = torch.cat([head,foot], dim=2)
+        part2 = body
+        embed = part1 * weight + part2 * (1 - weight)
+
         n, _, s, h, w = sils.size()
         retval = {
             'training_feat': {
-                'triplet': {'embeddings': embs, 'labels': labs}
+                'triplet': {'embeddings': embed, 'labels': labs}
             },
             'visual_summary': {
                 'image/sils': sils.view(n*s, 1, h, w)
             },
             'inference_feat': {
-                'embeddings': embs
+                'embeddings': embed
             }
         }
         return retval

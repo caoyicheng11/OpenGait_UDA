@@ -7,7 +7,7 @@ import torch.utils.data as tordata
 
 class TripletSampler(tordata.sampler.Sampler):
     def __init__(self, dataset, batch_size, batch_shuffle=False, 
-                 sample_strategy="low_sim", similarity_threshold=0.7):
+                 sample_strategy="mix", similarity_threshold=0.7):
         self.dataset = dataset
         self.batch_size = batch_size
         if len(self.batch_size) != 2:
@@ -31,7 +31,6 @@ class TripletSampler(tordata.sampler.Sampler):
 
             for pid in pid_list:
                 indices_with_sim = self.dataset.indices_dict[pid]
-                
                 if self.sample_strategy == "low_sim":
                     indices_with_sim = sorted(indices_with_sim, key=lambda x: x[1])
                     selected = indices_with_sim[:self.batch_size[1]]
@@ -44,6 +43,7 @@ class TripletSampler(tordata.sampler.Sampler):
                     selected = low_with_sim[:self.batch_size[1]//2] + high_with_sim[:self.batch_size[1]//2] 
                 else:
                     random.shuffle(indices_with_sim)
+                    selected = indices_with_sim[:self.batch_size[1]]
                 
                 sample_indices += [x[0] for x in selected]
 

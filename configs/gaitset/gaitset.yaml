@@ -1,17 +1,20 @@
 data_cfg:
   dataset_name: CASIA-B
-  dataset_root: your_path
+  dataset_root: /root/autodl-tmp/CASIA-B
+  dataset_partition: /root/autodl-tmp/CASIA-B/CASIA-B.json
   num_workers: 1
   remove_no_gallery: false
   test_dataset_name: CASIA-B
+  eps: 0.75
+  min_samples: 4
 
 evaluator_cfg:
   enable_float16: false
-  restore_ckpt_strict: true
-  restore_hint: 40000
+  restore_ckpt_strict: false
+  restore_hint: 250000
   save_name: GaitSet
   sampler:
-    batch_size: 16
+    batch_size: 1
     sample_type: all_ordered
     type: InferenceSampler
   metric: euc # cos
@@ -19,18 +22,18 @@ evaluator_cfg:
 loss_cfg:
   loss_term_weight: 1.0
   margin: 0.2
-  type: TripletLoss
+  type: ClusterTripletLoss
   log_prefix: triplet
 
 model_cfg:
   model: GaitSet
   in_channels:
     - 1
-    - 32
     - 64
     - 128
+    - 256
   SeparateFCs:
-    in_channels: 128
+    in_channels: 256
     out_channels: 256
     parts_num: 62
   bin_num:
@@ -41,7 +44,7 @@ model_cfg:
     - 1
 
 optimizer_cfg:
-  lr: 0.1
+  lr: 0.0001
   momentum: 0.9
   solver: SGD
   weight_decay: 0.0005
@@ -49,28 +52,45 @@ optimizer_cfg:
 scheduler_cfg:
   gamma: 0.1
   milestones:
-    - 10000
-    - 20000
-    - 30000
+    - 250300
+    - 250600
+    - 250900
   scheduler: MultiStepLR
 
 trainer_cfg:
   enable_float16: true
   log_iter: 100
+  fix_BN: true
   with_test: true
-  restore_ckpt_strict: true
-  restore_hint: 0
-  save_iter: 10000
+  with_cluster: true
+  optimizer_reset: true
+  restore_ckpt_strict: false
+  restore_hint: 252000
+  save_iter: 300
+  cluster_iter: 600
   save_name: GaitSet
   sync_BN: false
-  total_iter: 40000
+  total_iter: 253000
   sampler:
     batch_shuffle: false
     batch_size:
       - 8
-      - 16
-    frames_num_fixed: 30
+      - 4
+    frames_num_fixed: 60
+    frames_skip_num: 0
     frames_num_max: 50
     frames_num_min: 25
-    sample_type: fixed_unordered
+    sample_type: fixed_ordered
     type: TripletSampler
+
+
+cluster_cfg:
+  sampler:
+    batch_shuffle: false
+    batch_size: 1
+    sample_type: all_ordered # all indicates whole sequence used to test, while ordered means input sequence by its natural order; Other options:   fixed_unordered
+    frames_all_limit: 720 # limit the number of sampled frames to prevent out of memory
+    type: InferenceSampler
+
+  transform:
+    - type: BaseSilCuttingTransform

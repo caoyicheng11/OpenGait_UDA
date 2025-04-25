@@ -1,17 +1,17 @@
 data_cfg:
   dataset_name: OUMVLP
   dataset_root: /root/autodl-tmp/OUMVLP
-  dataset_partition: /root/autodl-tmp//OUMVLP/OUMVLP.json
+  dataset_partition: ./datasets/OUMVLP/OUMVLP.json
   num_workers: 1
   remove_no_gallery: false # Remove probe if no gallery for it
   test_dataset_name: OUMVLP
-  eps: 0.5
+  eps: 0.45
   min_samples: 4
 
 evaluator_cfg:
   enable_float16: false
   restore_ckpt_strict: false
-  restore_hint: 50000
+  restore_hint: 180000
   save_name: DeepGaitV2
   sampler:
     batch_shuffle: false
@@ -45,7 +45,7 @@ model_cfg:
       - 512
 
 optimizer_cfg:
-  lr: 0.0001
+  lr: 0.00001
   momentum: 0.9
   solver: SGD
   weight_decay: 0.0005
@@ -60,15 +60,15 @@ scheduler_cfg:
 
 trainer_cfg:
   enable_float16: true # half_percesion float for memory reduction and speedup
-  fix_BN: false
-  log_iter: 10
+  fix_BN: true
+  log_iter: 100
   with_test: true
   with_cluster: true
   optimizer_reset: true
-  cluster_iter: 500
+  cluster_iter: 300
   restore_ckpt_strict: false
-  restore_hint: 60000
-  save_iter: 200
+  restore_hint: 180200
+  save_iter: 50
   save_name: DeepGaitV2
   sync_BN: true
   total_iter: 1200000

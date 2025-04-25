@@ -6,12 +6,13 @@ data_cfg:
   remove_no_gallery: false # Remove probe if no gallery for it
   test_dataset_name: CASIA-B
   eps: 0.8
+  # eps: 0.45
   min_samples: 4
 
 evaluator_cfg:
   enable_float16: true
   restore_ckpt_strict: false
-  restore_hint: 122100
+  restore_hint: 120000
   save_name: DeepGaitV2
   sampler:
     batch_shuffle: false
@@ -45,7 +46,7 @@ model_cfg:
       - 512
 
 optimizer_cfg:
-  lr: 0.00001
+  lr: 0.0001
   momentum: 0.9
   solver: SGD
   weight_decay: 0.0005
@@ -64,14 +65,15 @@ trainer_cfg:
   log_iter: 100
   with_test: true
   with_cluster: true
-  # optimizer_reset: true
+  optimizer_reset: true
   cluster_iter: 300
   restore_ckpt_strict: false
   restore_hint: 120000
-  save_iter: 300
+  save_iter: 100
   save_name: DeepGaitV2
   sync_BN: true
-  total_iter: 122100
+  total_iter: 120900
+  # total_iter: 180900
   sampler:
     batch_shuffle: false
     batch_size:

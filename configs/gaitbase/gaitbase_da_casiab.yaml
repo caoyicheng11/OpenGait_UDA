@@ -1,12 +1,12 @@
 data_cfg:
   dataset_name: CASIA-B
-  dataset_root: ./datasets/CASIA-B
-  dataset_partition: ./datasets/CASIA-B/CASIA-B.json
+  dataset_root: /root/autodl-tmp/CASIA-B
+  dataset_partition: /root/autodl-tmp/CASIA-B/CASIA-B.json
   num_workers: 1
   remove_no_gallery: false # Remove probe if no gallery for it
   test_dataset_name: CASIA-B
-  eps: 1.5
-  min_samples: 8
+  eps: 0.8
+  min_samples: 4
 
 evaluator_cfg:
   enable_float16: true
@@ -66,7 +66,7 @@ model_cfg:
     - 16
 
 optimizer_cfg:
-  lr: 0.01
+  lr: 0.0001
   momentum: 0.9
   solver: SGD
   weight_decay: 0.0005
@@ -74,41 +74,42 @@ optimizer_cfg:
 scheduler_cfg:
   gamma: 0.1
   milestones: # Learning Rate Reduction at each milestones
-    - 200
-    - 400
-    - 600
+    - 120300
+    - 120600
+    - 120900
   scheduler: MultiStepLR
 trainer_cfg:
   enable_float16: true # half_percesion float for memory reduction and speedup
-  fix_BN: false
+  fix_BN: true
   with_test: true
   with_cluster: true
-  cluster_iter: 200
-  log_iter: 1
+  cluster_iter: 600
+  log_iter: 100
   restore_ckpt_strict: false
-  restore_hint: 120000
-  save_iter: 50
+  restore_hint: 122100
+  save_iter: 300
   save_name: GaitBase_DA
   sync_BN: true
-  total_iter: 600000
+  total_iter: 123000
   sampler:
     batch_shuffle: false
     batch_size:
       - 8 # TripletSampler, batch_size[0] indicates Number of Identity
-      - 8 #                 batch_size[1] indicates Samples sequqnce for each Identity
-    frames_num_fixed: 30 # fixed frames number for training
+      - 4 #                 batch_size[1] indicates Samples sequqnce for each Identity
+    frames_num_fixed: 60 # fixed frames number for training
     frames_num_max: 40 # max frames number for unfixed training
     frames_num_min: 20 # min frames number for unfixed traing
-    sample_type: fixed_unordered # fixed control input frames number, unordered for controlling order of input tensor; Other options: unfixed_ordered or all_ordered
+    frames_skip_num: 0
+    sample_type: fixed_ordered # fixed control input frames number, unordered for controlling order of input tensor; Other options: unfixed_ordered or all_ordered
     type: TripletSampler
   transform:
     - type: Compose
       trf_cfg:
         - type: BaseSilCuttingTransform
-        # - type: RandomRotate
-        #   prob: 0.3
-        # - type: RandomErasing
-        #   prob: 0.3
+        - type: RandomRotate
+          prob: 0.3
+        - type: RandomErasing
+          prob: 0.3
 
 cluster_cfg:
   sampler:

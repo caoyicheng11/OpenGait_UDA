@@ -12,6 +12,7 @@ from ..modules import SetBlockWrapper, HorizontalPoolingPyramid, PackSequenceWra
 from utils import np2var, list2var, get_valid_args, ddp_all_gather
 from data.transform import get_transform
 from einops import rearrange
+import torch.nn.functional as F
 
 blocks_map = {
     '2d': BasicBlock2D, 
@@ -95,7 +96,15 @@ class DeepGaitV2(BaseModel):
         # self.BNNecks = SeparateBNNecks(16, channels[2], class_num=model_cfg['SeparateBNNecks']['class_num'])
         self.TP = PackSequenceWrapper(torch.max)
         self.HPP = HorizontalPoolingPyramid(bin_num=[16])
-        self.alpha = nn.Parameter(torch.Tensor([0.9]))
+        # self.alpha = nn.Parameter(torch.Tensor([0.6]))
+        # print(self.alpha)
+        self.part_weights = nn.Parameter(torch.Tensor([
+            10, 10, 5, 5,
+            1, 1, 1, 1,
+            1, 1, 1, 1,
+            5, 5, 10, 10,
+        ]))
+
 
 
     def make_layer(self, block, planes, stride, blocks_num, mode='2d'):
@@ -123,6 +132,9 @@ class DeepGaitV2(BaseModel):
 
     def forward(self, inputs):
         ipts, labs, typs, vies, seqL = inputs
+
+        # if self.training:
+        #     print(self.part_weights)
         
         if len(ipts[0].size()) == 4:
             sils = ipts[0].unsqueeze(1)
@@ -147,18 +159,21 @@ class DeepGaitV2(BaseModel):
         embed_1 = self.FCs(feat)  # [n, c, p]
         # embed_2, logits = self.BNNecks(embed_1)  # [n, c, p]
 
-        if self.inference_use_emb2:
-                embed = embed_2
-        else:
-                embed = embed_1
+        weighted_embed = embed_1 * self.part_weights.view(1, 1, -1)  # 维度广播
+        weighted_embed = F.normalize(weighted_embed, dim=-1)
 
-        weight = self.alpha
-        head = embed_1[:, :, :4]
-        body = embed_1[:, :, 4:-4]
-        foot = embed_1[:, :, -4:]
-        part1 = torch.cat([head,foot], dim=2)
-        part2 = body
-        embed = part1 * weight + part2 * (1 - weight)
+        if self.inference_use_emb2:
+                embed = weighted_embed
+        else:
+                embed = weighted_embed
+
+        # weight = self.alpha
+        # head = embed_1[:, :, :4]
+        # body = embed_1[:, :, 4:-4]
+        # foot = embed_1[:, :, -4:]
+        # part1 = torch.cat([head,foot], dim=2)
+        # part2 = body
+        # embed = part1 * weight + part2 * (1 - weight)
 
         retval = {
             'training_feat': {
